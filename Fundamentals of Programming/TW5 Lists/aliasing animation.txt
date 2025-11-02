@@ -1,0 +1,134 @@
+# Aliasing in Python lists — animated, with a separate caption panel
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle, FancyArrowPatch
+from matplotlib import animation
+
+# ---------- Scenario (steps we animate) ----------
+story = []
+# Step 0: aliasing
+a0 = [1, 2, 3]; b0 = a0
+story.append(dict(a_contents=list(a0), b_contents=list(b0), same_obj=True,
+                  caption="Start: a = [1, 2, 3]; b = a  (b aliases a)",
+                  a_obj=100, b_obj=100))
+# Step 1: mutate aliased object
+a1 = [1, 2, 3, 4]
+story.append(dict(a_contents=list(a1), b_contents=list(a1), same_obj=True,
+                  caption="a.append(4): mutation affects *both* (same object)",
+                  a_obj=100, b_obj=100))
+# Step 2: mutate via b
+a2 = [99, 2, 3, 4]
+story.append(dict(a_contents=list(a2), b_contents=list(a2), same_obj=True,
+                  caption="b[0] = 99: still the same object; both show the change",
+                  a_obj=100, b_obj=100))
+# Step 3: concatenation creates new list for a
+a3 = [99, 2, 3, 4, 5]; b3 = [99, 2, 3, 4]
+story.append(dict(a_contents=list(a3), b_contents=list(b3), same_obj=False,
+                  caption="a = a + [5]: concatenation makes a *new* list object for a",
+                  a_obj=200, b_obj=100))
+# Step 4: slice copy creates new list for b
+a4 = [99, 2, 3, 4, 5]; b4 = [99, 2, 3, 4]
+story.append(dict(a_contents=list(a4), b_contents=list(b4), same_obj=False,
+                  caption="b = b[:]: slice copy makes a *new* list object for b",
+                  a_obj=200, b_obj=300))
+# Step 5: mutate b only (no alias now)
+a5 = [99, 2, 3, 4, 5]; b5 = [101, 2, 3, 4]
+story.append(dict(a_contents=list(a5), b_contents=list(b5), same_obj=False,
+                  caption="b[0] = 101: different objects now; a is unaffected",
+                  a_obj=200, b_obj=300))
+
+# ---------- Drawing helpers ----------
+def draw_var_box(ax, xy, text):
+    x, y = xy; w, h = 1.6, 0.6
+    rect = Rectangle((x, y), w, h, fill=False)
+    ax.add_patch(rect)
+    txt = ax.text(x + w/2, y + h/2, text, ha="center", va="center", fontsize=12)
+    return rect, txt, (x + w, y + h/2)
+
+def draw_obj_box(ax, xy, contents, obj_id):
+    x, y = xy; w, h = 4.2, 1.2
+    rect = Rectangle((x, y), w, h, fill=False)
+    ax.add_patch(rect)
+    txt = ax.text(x + w/2, y + h/2,
+                  f"list object\nid={obj_id}\n{contents}",
+                  ha="center", va="center", fontsize=11)
+    return rect, txt, (x, y + h/2)
+
+def draw_arrow(ax, tail_xy, head_xy):
+    arr = FancyArrowPatch(posA=tail_xy, posB=head_xy, arrowstyle="->", mutation_scale=15)
+    ax.add_patch(arr)
+    return arr
+
+# ---------- Figure: top = diagram axes, bottom = caption axes ----------
+fig = plt.figure(constrained_layout=True, figsize=(9, 6))
+gs = fig.add_gridspec(nrows=2, ncols=1, height_ratios=[4, 1])
+
+ax = fig.add_subplot(gs[0])      # drawing area
+cap_ax = fig.add_subplot(gs[1])  # captions area
+fig.suptitle("Aliasing in Python Lists — Animated", fontsize=14)
+
+# Configure drawing axes
+ax.set_xlim(0, 8); ax.set_ylim(0, 5)
+ax.set_xticks([]); ax.set_yticks([])
+
+# Configure caption axes (text only)
+cap_ax.set_axis_off()
+cap_ax.set_xlim(0, 1); cap_ax.set_ylim(0, 1)
+caption_txt = cap_ax.text(0.02, 0.85, "", ha="left", va="top", fontsize=12, wrap=True)
+repr_txt    = cap_ax.text(0.02, 0.25, "", ha="left", va="bottom", fontsize=11, family="monospace")
+
+# Static variable boxes
+a_var_rect, a_var_txt, a_tail = draw_var_box(ax, (0.5, 3.3), "a")
+b_var_rect, b_var_txt, b_tail = draw_var_box(ax, (0.5, 1.7), "b")
+
+# Placeholders for dynamic artists
+artists = {"a_obj_rect": None, "a_obj_txt": None,
+           "b_obj_rect": None, "b_obj_txt": None,
+           "a_arrow": None, "b_arrow": None}
+
+def init():
+    return []
+
+def update(frame):
+    state = story[frame]
+
+    # Remove old dynamic artists
+    for k, art in list(artists.items()):
+        if art is not None:
+            try: art.remove()
+            except Exception: pass
+            artists[k] = None
+
+    # Draw object(s) + arrows
+    if state["same_obj"]:
+        a_rect, a_txt, a_head = draw_obj_box(ax, (3.2, 3.0), state["a_contents"], state["a_obj"])
+        artists["a_obj_rect"] = artists["b_obj_rect"] = a_rect
+        artists["a_obj_txt"]  = artists["b_obj_txt"]  = a_txt
+        artists["a_arrow"] = draw_arrow(ax, a_tail, (a_head[0], a_head[1] + 0.05))
+        artists["b_arrow"] = draw_arrow(ax, b_tail, (a_head[0], a_head[1] - 0.05))
+    else:
+        a_rect, a_txt, a_head = draw_obj_box(ax, (3.2, 3.0), state["a_contents"], state["a_obj"])
+        b_rect, b_txt, b_head = draw_obj_box(ax, (3.2, 1.0), state["b_contents"], state["b_obj"])
+        artists["a_obj_rect"], artists["a_obj_txt"] = a_rect, a_txt
+        artists["b_obj_rect"], artists["b_obj_txt"] = b_rect, b_txt
+        artists["a_arrow"] = draw_arrow(ax, a_tail, a_head)
+        artists["b_arrow"] = draw_arrow(ax, b_tail, b_head)
+
+    # Update the separate caption panel (no overlap)
+    caption_txt.set_text(f"Step {frame}: {state['caption']}")
+    repr_txt.set_text(
+        f"a -> id {state['a_obj']}  value {state['a_contents']}\n"
+        f"b -> id {state['b_obj']}  value {state['b_contents']}"
+    )
+
+    vis = [caption_txt, repr_txt]
+    for art in artists.values():
+        if art is not None: vis.append(art)
+    return vis
+
+anim = animation.FuncAnimation(fig, update, init_func=init,
+                               frames=len(story), interval=1500,
+                               blit=False, repeat=True)
+
+# In a .py / IDLE run:
+plt.show()
+# (If you want a GIF: from matplotlib.animation import PillowWriter; anim.save("aliasing.gif", writer=PillowWriter(fps=1)))
